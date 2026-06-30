@@ -1,0 +1,7 @@
+# v2 grid recognizer. Tested on Apple M2 (MPS) with Python 3.13.
+transformers>=4.49      # provides Qwen2_5_VLForConditionalGeneration
+accelerate>=0.26
+torch>=2.4
+opencv-python>=4.10
+numpy>=1.26
+pillow>=10.0

@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-extract_grid.py  --  Read a photo/scan of a grid sheet and OCR every cell.
+extract_grid.py  --  Read a photo/scan of a grid sheet and transcribe every cell.
 
-Self-describing AND scale-free: the corner markers encode rows/cols, and the grid
-is reconstructed RELATIVE TO THE MARKERS (the quad of their inner corners), so you
-never pass the grid size or any geometry, and it works at any print zoom.
+Self-describing and scale-free: the corner ArUco markers encode rows/cols, and the grid
+is reconstructed RELATIVE TO THE MARKERS (the quad of their inner corners), so you never
+pass the grid size or any geometry, and it works at any angle or print zoom.
 
-    python3 extract_grid.py photo.jpg                 # blind -> prints text grid + cells.csv
-    python3 extract_grid.py photo.jpg --csv out.csv
-    python3 extract_grid.py photo.jpg --save-cells cells --debug
+    python3 extract_grid.py photo.jpg                 # blind -> prints grid + cells.csv
+    python3 extract_grid.py photo.jpg --csv out.csv --json out.json
+    python3 extract_grid.py photo.jpg --save-cells cells
 
-Pipeline: detect 4 markers -> decode rows/cols from their IDs -> map the markers'
-inner corners to a canonical rectangle (homography undoes perspective + scale) ->
-warp -> slice into an even rows x cols grid -> OCR each non-blank cell (TrOCR).
+Pipeline: detect 4 markers -> decode rows/cols -> homography (undo perspective+scale) ->
+snap cell boundaries onto the printed lines -> slice -> Qwen2.5-VL reads each filled cell
+(blank cells skipped). Qwen handles multi-word and multi-line cells, which v1 could not.
 """
-import argparse, csv, os
+import argparse, csv, json, os
 import numpy as np
 import cv2
 import gridlib as gl
@@ -56,8 +56,8 @@ def rectify(photo_path):
 
 
 def _snap(profile, expected, win):
-    """Move each expected boundary to the darkest column/row within +-win, but only
-    if there's a real line there (clear peak); otherwise keep the even position."""
+    """Move each expected boundary to the darkest column/row within +-win, but only if
+    there's a real line there (clear peak); otherwise keep the even position."""
     med = np.median(profile)
     mad = np.median(np.abs(profile - med)) + 1e-6
     out = []
@@ -103,14 +103,13 @@ def slice_cells(flat, rows, cols, inset, snap=True):
 
 
 def print_grid(text, rows, cols):
-    """Pretty-print the OCR'd grid as an aligned table."""
-    w = max(3, max((len(t) for t in text), default=1))
+    """Pretty-print the transcribed grid as an aligned table."""
+    w = max(4, max((len(t) for t in text), default=1))
     for r in range(rows):
-        line = " | ".join(text[r * cols + c].center(w) for c in range(cols))
-        print(f"  {line}")
+        print("  " + " | ".join(text[r * cols + c].center(w) for c in range(cols)))
 
 
-def extract(photo_path, csv_path, inset, save_cells, debug, batch, snap, model_name):
+def extract(photo_path, csv_path, json_path, inset, save_cells, snap):
     rows, cols, flat = rectify(photo_path)
     print(f"detected: rows={rows} cols={cols}")
 
@@ -118,57 +117,48 @@ def extract(photo_path, csv_path, inset, save_cells, debug, batch, snap, model_n
 
     if save_cells:
         os.makedirs(save_cells, exist_ok=True)
-        if debug:
-            cv2.imwrite(os.path.join(save_cells, "_rectified.png"), flat)
+        cv2.imwrite(os.path.join(save_cells, "_rectified.png"), flat)
         for i, cell in enumerate(cells):
             cv2.imwrite(
                 os.path.join(save_cells, f"cell_{i // cols}_{i % cols}.png"), cell
             )
 
-    # blank cells -> None so OCR skips them (no wasted inference, no hallucination)
+    # blank cells -> None so the model skips them (no wasted calls, no hallucination)
     to_read = [None if ocr.is_blank(cell) else cell for cell in cells]
     n_filled = sum(c is not None for c in to_read)
-    print(
-        f"OCR: {n_filled}/{len(cells)} non-blank cells (TrOCR, this may take a moment)..."
-    )
-    text = ocr.ocr_cells(to_read, batch_size=batch, model_name=model_name)
+    print(f"reading {n_filled}/{len(cells)} filled cells with Qwen2.5-VL (~4s each)...")
+    text = ocr.recognize(to_read)
 
     print_grid(text, rows, cols)
+    grid = [[text[r * cols + c] for c in range(cols)] for r in range(rows)]
 
     with open(csv_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        for r in range(rows):
-            writer.writerow([text[r * cols + c] for c in range(cols)])
-    print(f"wrote {csv_path}  ({rows}x{cols}, {n_filled} non-blank)")
+        csv.writer(f).writerows(grid)
+    print(f"wrote {csv_path}  ({rows}x{cols}, {n_filled} filled)")
+    if json_path:
+        with open(json_path, "w") as f:
+            json.dump({"rows": rows, "cols": cols, "grid": grid}, f, indent=2)
+        print(f"wrote {json_path}")
 
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("photo")
     p.add_argument("--csv", default="cells.csv", help="output CSV path")
+    p.add_argument("--json", default=None, help="also write a JSON transcription")
     p.add_argument(
         "--inset", type=int, default=-1, help="px trimmed per edge (-1 auto)"
     )
-    p.add_argument("--save-cells", default=None, help="also dump cell PNGs to this dir")
-    p.add_argument("--batch", type=int, default=16, help="OCR batch size")
     p.add_argument(
-        "--model",
-        choices=list(ocr.MODELS),
-        default=ocr.DEFAULT_MODEL,
-        help="TrOCR model: large (words/phrases) or base (single chars, faster)",
+        "--save-cells", default=None, help="dump rectified + cell PNGs to dir"
     )
     p.add_argument(
         "--no-snap",
         action="store_true",
         help="skip snapping cell boundaries onto the printed grid lines",
     )
-    p.add_argument(
-        "--debug", action="store_true", help="with --save-cells, also save rectified"
-    )
     a = p.parse_args()
-    extract(
-        a.photo, a.csv, a.inset, a.save_cells, a.debug, a.batch, not a.no_snap, a.model
-    )
+    extract(a.photo, a.csv, a.json, a.inset, a.save_cells, not a.no_snap)
 
 
 if __name__ == "__main__":
