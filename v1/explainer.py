@@ -22,7 +22,7 @@ import gridlib as gl
 import ocr
 from extract_grid import rectify, slice_cells
 
-PHOTO = "IMG_8466.JPG"
+PHOTO = "input/IMG_8466.JPG"
 OUT = "explainer_out"
 
 # palette (GitHub-dark, reads well on a YouTube timeline)

@@ -17,7 +17,7 @@ import cv2
 import gridlib as gl
 
 
-def build(rows, cols, over, label):
+def build(rows, cols, over):
     L = gl.print_layout(rows, cols, **over)
     img = np.full((L["H"], L["W"]), 255, np.uint8)
     ids = gl.encode_ids(rows, cols)
@@ -33,20 +33,6 @@ def build(rows, cols, over, label):
     for y in ys:
         cv2.line(img, (xs[0], y), (xs[-1], y), 0, L["line_px"])
 
-    if label:
-        fs = max(0.25, min(0.6, L["cell_w"] / 130))
-        for r in range(rows):
-            for c in range(cols):
-                cv2.putText(
-                    img,
-                    f"{r},{c}",
-                    (xs[c] + 3, ys[r] + 16),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    fs,
-                    170,
-                    1,
-                    cv2.LINE_AA,
-                )
     return img, L, ids
 
 
@@ -57,12 +43,11 @@ def main():
     p.add_argument("--dpi", type=int, default=gl.PRINT["dpi"])
     p.add_argument("--margin", type=float, default=gl.PRINT["margin_in"])
     p.add_argument("--marker", type=float, default=gl.PRINT["marker_in"])
-    p.add_argument("--no-label", action="store_true")
     p.add_argument("--out", default="grid")
     a = p.parse_args()
 
     over = dict(dpi=a.dpi, margin_in=a.margin, marker_in=a.marker)
-    img, L, ids = build(a.rows, a.cols, over, not a.no_label)
+    img, L, ids = build(a.rows, a.cols, over)
     cv2.imwrite(f"{a.out}.png", img)
 
     cwp, chp = L["xs"][1] - L["xs"][0], L["ys"][1] - L["ys"][0]

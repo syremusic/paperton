@@ -19,16 +19,25 @@ import cv2
 import numpy as np
 from functools import lru_cache
 
-MODEL = "microsoft/trocr-base-handwritten"
+# "large" handles multi-letter words/phrases best (it's a line recogniser) and is
+# the right default for open handwriting like "vinyl kick". "base" is faster and a
+# bit better on ISOLATED single characters. Both share TrOCR's quirk of nudging
+# block capitals toward common words (HAT -> that); large just does it less.
+MODELS = {
+    "large": "microsoft/trocr-large-handwritten",
+    "base": "microsoft/trocr-base-handwritten",
+}
+DEFAULT_MODEL = "large"
 
 
-@lru_cache(maxsize=1)
-def _model():
+@lru_cache(maxsize=2)
+def _model(name=DEFAULT_MODEL):
     import torch
     from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
-    proc = TrOCRProcessor.from_pretrained(MODEL)
-    model = VisionEncoderDecoderModel.from_pretrained(MODEL)
+    repo = MODELS.get(name, name)
+    proc = TrOCRProcessor.from_pretrained(repo)
+    model = VisionEncoderDecoderModel.from_pretrained(repo)
     if torch.backends.mps.is_available():
         dev = "mps"
     elif torch.cuda.is_available():
@@ -84,18 +93,22 @@ def prep(cell_bgr):
 
 
 def clean(s):
-    """Tidy TrOCR's single-glyph output: longest token, alphanumerics only.
+    """Tidy TrOCR output while preserving multi-word cells ("vinyl kick").
 
-    TrOCR tends to double a lone character ("3 3", "10 0") or tack on punctuation
-    ("F."). The longest whitespace token recovers the intended glyph in both cases.
+    Strip stray punctuation from each token and collapse consecutive duplicates,
+    which is how TrOCR doubles a lone glyph ("3 3" -> "3", "HAT HAT" -> "HAT"),
+    without dropping real extra words.
     """
-    toks = [t for t in re.split(r"\s+", s.strip()) if t]
-    if not toks:
-        return ""
-    return re.sub(r"[^A-Za-z0-9]", "", max(toks, key=len))
+    toks = [re.sub(r"[^A-Za-z0-9]", "", t) for t in s.split()]
+    toks = [t for t in toks if t]
+    out = []
+    for t in toks:
+        if not out or out[-1].lower() != t.lower():
+            out.append(t)
+    return " ".join(out)
 
 
-def ocr_cells(cells_bgr, batch_size=16):
+def ocr_cells(cells_bgr, batch_size=16, model_name=DEFAULT_MODEL):
     """OCR a list of BGR cell crops. Entries that are None (blank) yield ''.
 
     Returns a list[str] aligned with the input.
@@ -103,7 +116,7 @@ def ocr_cells(cells_bgr, batch_size=16):
     import torch
     from PIL import Image
 
-    proc, model, dev = _model()
+    proc, model, dev = _model(model_name)
     results = [""] * len(cells_bgr)
     imgs, owners = [], []
     for i, cell in enumerate(cells_bgr):
@@ -119,7 +132,7 @@ def ocr_cells(cells_bgr, batch_size=16):
             images=imgs[b : b + batch_size], return_tensors="pt"
         ).pixel_values.to(dev)
         with torch.no_grad():
-            out = model.generate(pix, max_new_tokens=8)
+            out = model.generate(pix, max_new_tokens=16)  # room for short phrases
         for i, t in zip(
             owners[b : b + batch_size], proc.batch_decode(out, skip_special_tokens=True)
         ):

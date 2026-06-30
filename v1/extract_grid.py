@@ -55,12 +55,41 @@ def rectify(photo_path):
     return rows, cols, flat
 
 
-def slice_cells(flat, rows, cols, inset):
+def _snap(profile, expected, win):
+    """Move each expected boundary to the darkest column/row within +-win, but only
+    if there's a real line there (clear peak); otherwise keep the even position."""
+    med = np.median(profile)
+    mad = np.median(np.abs(profile - med)) + 1e-6
+    out = []
+    for e in expected:
+        a, b = max(0, e - win), min(len(profile) - 1, e + win)
+        j = a + int(np.argmax(profile[a : b + 1]))
+        out.append(j if profile[j] - med > 4 * mad else e)
+    for i in range(1, len(out)):  # keep strictly increasing
+        out[i] = max(out[i], out[i - 1] + 1)
+    return out
+
+
+def snap_grid(flat, xs, ys):
+    """Snap even cell boundaries onto the actual printed grid lines, correcting the
+    residual drift left by paper curl / lens distortion after the flat-plane warp."""
+    g = cv2.cvtColor(flat, cv2.COLOR_BGR2GRAY)
+    bg = cv2.GaussianBlur(g, (0, 0), 25)
+    dark = 255.0 - cv2.divide(g, bg, scale=255)  # ink, with lighting flattened
+    win = max(4, int(0.18 * gl.CELL))
+    return _snap(dark.sum(0), xs, win), _snap(dark.sum(1), ys, win)
+
+
+def slice_cells(flat, rows, cols, inset, snap=True):
     """Return a list of cell crops (row-major), with the inset trimmed off."""
     C = gl.canonical(rows, cols)
     xs, ys = C["xs"], C["ys"]
+    if snap:
+        xs, ys = snap_grid(flat, xs, ys)
     if inset < 0:
-        inset = max(1, int(0.10 * gl.CELL))
+        # just enough to clear the printed grid line; more than this clips ink that
+        # overflows toward the cell edges (handwriting is often larger than the box)
+        inset = max(1, int(0.04 * gl.CELL))
     inset = max(0, min(inset, (gl.CELL - 2) // 2))
     cells = []
     for r in range(rows):
@@ -81,11 +110,11 @@ def print_grid(text, rows, cols):
         print(f"  {line}")
 
 
-def extract(photo_path, csv_path, inset, save_cells, debug, batch):
+def extract(photo_path, csv_path, inset, save_cells, debug, batch, snap, model_name):
     rows, cols, flat = rectify(photo_path)
     print(f"detected: rows={rows} cols={cols}")
 
-    cells, inset = slice_cells(flat, rows, cols, inset)
+    cells, inset = slice_cells(flat, rows, cols, inset, snap)
 
     if save_cells:
         os.makedirs(save_cells, exist_ok=True)
@@ -102,7 +131,7 @@ def extract(photo_path, csv_path, inset, save_cells, debug, batch):
     print(
         f"OCR: {n_filled}/{len(cells)} non-blank cells (TrOCR, this may take a moment)..."
     )
-    text = ocr.ocr_cells(to_read, batch_size=batch)
+    text = ocr.ocr_cells(to_read, batch_size=batch, model_name=model_name)
 
     print_grid(text, rows, cols)
 
@@ -123,10 +152,18 @@ def main():
     p.add_argument("--save-cells", default=None, help="also dump cell PNGs to this dir")
     p.add_argument("--batch", type=int, default=16, help="OCR batch size")
     p.add_argument(
+        "--model", choices=list(ocr.MODELS), default=ocr.DEFAULT_MODEL,
+        help="TrOCR model: large (words/phrases) or base (single chars, faster)",
+    )
+    p.add_argument(
+        "--no-snap", action="store_true",
+        help="skip snapping cell boundaries onto the printed grid lines",
+    )
+    p.add_argument(
         "--debug", action="store_true", help="with --save-cells, also save rectified"
     )
     a = p.parse_args()
-    extract(a.photo, a.csv, a.inset, a.save_cells, a.debug, a.batch)
+    extract(a.photo, a.csv, a.inset, a.save_cells, a.debug, a.batch, not a.no_snap, a.model)
 
 
 if __name__ == "__main__":
