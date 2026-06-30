@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+
+# Generated grid artifacts
+grid.png
+grid.json
+cells/
+
+# Scan inputs (photos/scans of printed sheets)
+*.jpg
+*.jpeg
+*.JPG
+*.JPEG
