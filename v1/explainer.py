@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 explainer.py  --  Render a step-by-step visual of the v1 grid engine for video use.
 
@@ -7,7 +7,7 @@ per stage into explainer_out/, plus a combined poster explainer.png. The OCR tex
 is hardcoded (the actual result from our run) so this renders instantly without
 loading the TrOCR model -- it's a presentation asset, not the pipeline itself.
 
-    python3 explainer.py
+    python explainer.py
 """
 import os
 import cv2

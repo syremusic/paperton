@@ -69,7 +69,7 @@ def build(
         label, cols_hit = row_label_and_steps(grid[r])
         if not label:
             continue
-        label = f"{label} drum one-shot"  # for now - improves results
+        label = f"{label} one-shot"  # for now - improves results
         hits = opencrate.search(label, k=k, server=server)
         hit, prob = opencrate.pick(hits, temperature=temperature, rng=rng)
         if hit is None:

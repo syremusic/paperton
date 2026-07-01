@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 make_grid.py  --  Generate a printable, SELF-DESCRIBING grid sheet.
 
@@ -7,9 +7,9 @@ rows/cols, and the grid is drawn to exactly fill the markers' inner-corner quad,
 extract_grid.py can read any sheet with no sidecar -- at any print scale.
 
 Examples:
-    python3 make_grid.py --rows 6  --cols 4
-    python3 make_grid.py --rows 8  --cols 64
-    python3 make_grid.py --rows 12 --cols 20 --out sheet
+    python make_grid.py --rows 6  --cols 4
+    python make_grid.py --rows 8  --cols 64
+    python make_grid.py --rows 12 --cols 20 --out sheet
 """
 import argparse
 import numpy as np

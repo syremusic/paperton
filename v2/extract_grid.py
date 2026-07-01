@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 extract_grid.py  --  Read a photo/scan of a grid sheet and transcribe every cell.
 
@@ -6,9 +6,9 @@ Self-describing and scale-free: the corner ArUco markers encode rows/cols, and t
 is reconstructed RELATIVE TO THE MARKERS (the quad of their inner corners), so you never
 pass the grid size or any geometry, and it works at any angle or print zoom.
 
-    python3 extract_grid.py photo.jpg                 # blind -> prints grid + cells.csv
-    python3 extract_grid.py photo.jpg --csv out.csv --json out.json
-    python3 extract_grid.py photo.jpg --save-cells cells
+    python extract_grid.py photo.jpg                 # blind -> prints grid + cells.csv
+    python extract_grid.py photo.jpg --csv out.csv --json out.json
+    python extract_grid.py photo.jpg --save-cells cells
 
 Pipeline: detect 4 markers -> decode rows/cols -> homography (undo perspective+scale) ->
 snap cell boundaries onto the printed lines -> slice -> Qwen2.5-VL reads each filled cell

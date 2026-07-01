@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 explainer.py  --  One-figure visual of how v2 turns a photo into text.
 
@@ -6,7 +6,7 @@ Three steps: detect markers -> flatten & slice -> Qwen2.5-VL reads each filled c
 Geometry is computed live from the real photo; the Qwen readings are hardcoded from an
 actual run, so this renders instantly without loading the 8GB model. Output: explainer.png
 
-    python3 explainer.py
+    python explainer.py
 """
 import cv2
 import numpy as np
@@ -19,7 +19,7 @@ from matplotlib.patches import Polygon, FancyArrowPatch
 import gridlib as gl
 from extract_grid import rectify, slice_cells
 
-PHOTO = "../v1/input/IMG_8468.JPG"
+PHOTO = "../input/IMG_8468.JPG"
 BG, FG, DIM, ACC = "#0d1117", "#e6edf3", "#8b949e", "#58a6ff"
 
 # Actual Qwen2.5-VL readings (hardcoded). The first three are the multi-line / multi-word

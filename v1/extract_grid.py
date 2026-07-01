@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 extract_grid.py  --  Read a photo/scan of a grid sheet and OCR every cell.
 
@@ -6,9 +6,9 @@ Self-describing AND scale-free: the corner markers encode rows/cols, and the gri
 is reconstructed RELATIVE TO THE MARKERS (the quad of their inner corners), so you
 never pass the grid size or any geometry, and it works at any print zoom.
 
-    python3 extract_grid.py photo.jpg                 # blind -> prints text grid + cells.csv
-    python3 extract_grid.py photo.jpg --csv out.csv
-    python3 extract_grid.py photo.jpg --save-cells cells --debug
+    python extract_grid.py photo.jpg                 # blind -> prints text grid + cells.csv
+    python extract_grid.py photo.jpg --csv out.csv
+    python extract_grid.py photo.jpg --save-cells cells --debug
 
 Pipeline: detect 4 markers -> decode rows/cols from their IDs -> map the markers'
 inner corners to a canonical rectangle (homography undoes perspective + scale) ->
